@@ -2,6 +2,9 @@
 #define TRANS_LIST_SIZE 20
 #define HASH_HEX_SIZE 65
 #define MESSAGE_SIZE 1024
+#define HASH_SIZE 32
+#define BLOCK_STR_SIZE 30000
+#define BLOCK_BUFFER_SIZE 5000
 
 // Transaction structure
 typedef struct transaction {
@@ -41,8 +44,8 @@ typedef struct node {
 } node;
 
 block* create_genesis_block();
-char* hash_block(block* block);
-char* hash_transaction(transaction txn[TRANS_LIST_SIZE]);
+char* hash_block(char* output , block* in_block);
+char hash_transaction(char* output , transaction* trans_list, unsigned int trans_list_length);
 int challenge(block* prev, char sender[PUBLIC_ADDRESS_SIZE], int nonce);
 block* create_new_block(block* prev, int nonce);
 transaction* add_transaction(char sender[PUBLIC_ADDRESS_SIZE], char recipient[PUBLIC_ADDRESS_SIZE], int amount, char signature);
@@ -52,3 +55,4 @@ int get_current_block();
 transaction* get_transactions();
 void serializeNode(node* data, unsigned char* buffer);
 void deserializeNode(node* data, unsigned char* buffer);
+void hash256(unsigned char* output, const char* input);
