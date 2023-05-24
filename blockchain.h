@@ -44,10 +44,9 @@ typedef struct node {
 block* create_genesis_block();
 char* hash_block(block block);
 char* hash_transaction(transaction txn[TRANS_LIST_SIZE]);
-int challenge(block prev, char sender[PUBLIC_ADDRESS_SIZE], int nonce);
-block* create_new_block(block* prev, int nonce);
+int challenge(block current, char sender[PUBLIC_ADDRESS_SIZE], int nonce);
 transaction* add_transaction(char sender[PUBLIC_ADDRESS_SIZE], char recipient[PUBLIC_ADDRESS_SIZE], int amount, char signature);
-block* mine(block prev, int nonce, char sender[PUBLIC_ADDRESS_SIZE]);
+block* mine(block current, int nonce, char sender[PUBLIC_ADDRESS_SIZE]);
 int balance(char address[PUBLIC_ADDRESS_SIZE]);
 int get_current_block();
 transaction* get_transactions();
