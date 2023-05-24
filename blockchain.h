@@ -2,16 +2,19 @@
 #define TRANS_LIST_SIZE 20
 #define HASH_HEX_SIZE 65
 #define MESSAGE_SIZE 1024
+#define HASH_SIZE 32
+#define BLOCK_STR_SIZE 30000
+#define BLOCK_BUFFER_SIZE 5000
 #define MAX_NONCE INT32_MAX
 #define DIFFICULTY 2
 #define BLOCK_REWARD 100
 
 // Transaction structure
 typedef struct transaction {
-    int timestamp;
+    unsigned int timestamp;
     char sender[PUBLIC_ADDRESS_SIZE];
     char recipient[PUBLIC_ADDRESS_SIZE];
-    int amount;
+    unsigned int amount;
     char hash[HASH_HEX_SIZE];
 } transaction;
 
@@ -51,8 +54,9 @@ typedef struct node {
 } node;
 
 block* create_genesis_block();
-char* hash_block(block* block);
-char* hash_transaction(transaction txn[TRANS_LIST_SIZE]);
+char* hash_block(block* block, char sender[PUBLIC_ADDRESS_SIZE], int nonce);
+char* hash_transaction(transaction txn);
+char* hash_transactions(transaction* trans_list, unsigned int trans_list_length);
 int challenge(block* current, char sender[PUBLIC_ADDRESS_SIZE], int nonce);
 transaction* add_transaction(char sender[PUBLIC_ADDRESS_SIZE], char recipient[PUBLIC_ADDRESS_SIZE], int amount, char signature);
 block* mine(block* current, int nonce, char sender[PUBLIC_ADDRESS_SIZE]);

@@ -585,8 +585,7 @@ void on_new_transaction(block current, transaction txns[TRANS_LIST_SIZE], unsign
         dict_insert(balances, txns[i].sender, &sender_balance, sizeof(sender_funds));
         dict_insert(balances, txns[i].recipient, &recipient_balance, sizeof(recipient_funds));
 
-        // hash transaction
-        transaction* tx = &txns[i];
-        strncpy(chain->trans_list[current_index].hash, hash_transaction(tx), HASH_HEX_SIZE);
+        char* hashed = hash_transaction(txns[i]);
+        strncpy(chain->trans_list[current_index].hash, hashed, HASH_HEX_SIZE);
     }
 }
