@@ -139,6 +139,7 @@ char* hash_block(block* block, char sender[PUBLIC_ADDRESS_SIZE], int nonce) {
 void serializeNode(node* data, unsigned char* buffer) {
     memcpy(buffer, data, sizeof(node));
 }
+
 void deserializeNode(node* data, unsigned char* buffer) {
     memcpy(data, buffer, sizeof(node));
 }
