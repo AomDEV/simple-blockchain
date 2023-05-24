@@ -13,16 +13,21 @@ const char* get_args(const char* argv[], char* name) {
     return NULL;
 }
 
-int get_int_args(const char* argv[], char* name[]) {
-    int port = 0;
-    for (int i = 0; i < 2; i++) {
-        const char* raw_port = get_args(argv, name[i]);
-        if(raw_port != NULL) {
-            sscanf(raw_port, "%d", &port);
-            break;
-        }
+const char* get_raw_args(const char* argv[], char* name[], int size) {
+    for (int i = 0; i < size; i++) {
+        const char* raw = get_args(argv, name[i]);
+        if(raw != NULL) return raw;
     }
-    return port;
+    return NULL;
+}
+
+int get_int_args(const char* argv[], char* name[], int size) {
+    int val = 0;
+    const char* raw = get_raw_args(argv, name, size);
+    if(raw != NULL) {
+        sscanf(raw, "%d", &val);
+    }
+    return val;
 }
 
 const char * int2str(int n) {
