@@ -165,6 +165,17 @@ void* bruteforce(void* boundary) {
         if(result > 0) {
             nonce.nonce = i;
             printf("\nThread #%d found nonce (%d)\n", data->index, i);
+            
+            block* mined = mine(*chain, i, address);
+            node buffer;
+            buffer.function = mined_block;
+            strcpy(buffer.sender, address);
+            buffer.current = *mined;
+
+            on_mined_block(buffer);
+            printf("\n=== Block #%d mined ===\n", chain->index);
+
+            broadcast(buffer);
             break;
         }
     }

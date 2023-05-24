@@ -1,8 +1,10 @@
-#define PUBLIC_ADDRESS_SIZE 500
+#define PUBLIC_ADDRESS_SIZE 64
 #define TRANS_LIST_SIZE 20
 #define HASH_HEX_SIZE 65
 #define MESSAGE_SIZE 1024
 #define MAX_NONCE 9999999
+#define DIFFICULTY 2
+#define BLOCK_REWARD 100
 
 // Transaction structure
 typedef struct transaction {
@@ -52,3 +54,5 @@ int get_current_block();
 transaction* get_transactions();
 void serializeNode(node* data, unsigned char* buffer);
 void deserializeNode(node* data, unsigned char* buffer);
+int get_difficulty(block prev);
+char* get_empty_address();
