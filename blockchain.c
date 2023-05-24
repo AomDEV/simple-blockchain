@@ -20,12 +20,12 @@ block* create_genesis_block() {
 int challenge(block current, char sender[PUBLIC_ADDRESS_SIZE], int nonce) {
     char* block_hash = hash_block(current);
     if(block_hash == NULL) return 0;
-    char* head[DIFFICULTY];
+    char* head = malloc(DIFFICULTY);
     memcpy(&head, block_hash , DIFFICULTY);
 
     // Build answer with DIFFICULTY 0's
-    char* answer[DIFFICULTY];
-    for (int i = 0; i < DIFFICULTY; i++) answer[i] = "0";
+    char* answer = malloc(DIFFICULTY);
+    for (int i = 0; i < DIFFICULTY; i++) answer[i] = '0';
 
     if(head == answer) return 1;
     return 0;
@@ -46,9 +46,8 @@ block* mine(block current, int nonce, char sender[PUBLIC_ADDRESS_SIZE]) {
     transaction txn;
     txn.timestamp = time(NULL);
     strcpy(txn.sender, get_empty_address());
-    strcpy(txn.recipient, *sender);
+    strcpy(txn.recipient, sender);
     txn.amount = 100;
-    strcpy(txn.hash, ""); // TODO: add transaction hash by calling function `hash_transaction`
 
     new_block->trans_list[0] = txn;
     new_block->trans_list_length++;
@@ -68,8 +67,8 @@ void deserializeNode(node* data, unsigned char* buffer) {
     memcpy(data, buffer, sizeof(node));
 }
 char* get_empty_address() {
-    char* address[PUBLIC_ADDRESS_SIZE];
-    for (int i = 0; i < PUBLIC_ADDRESS_SIZE; i++) address[i] = "0";
-    address[1] = "x";
+    char* address = malloc(PUBLIC_ADDRESS_SIZE);
+    for (int i = 0; i < PUBLIC_ADDRESS_SIZE; i++) address[i] = '0';
+    address[1] = 'x';
     return address;
 }
