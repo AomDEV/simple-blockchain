@@ -269,3 +269,44 @@ int dict_foreach(dict* in_dict, int (*func)(bt_node* current_node, void* data), 
     return 1;
 
 }
+
+// Function to count the number of keys in the dictionary
+int count_keys(bt_node* in_node, int* count) {
+    if (in_node == NULL)
+        return 0;
+
+    (*count)++;
+    count_keys(in_node->left, count);
+    count_keys(in_node->right, count);
+
+    return *count;
+}
+
+// Function to populate the keys array
+void populate_keys(bt_node* in_node, char** keys, int* index) {
+    if (in_node == NULL)
+        return;
+
+    keys[*index] = in_node->key;
+    (*index)++;
+
+    populate_keys(in_node->left, keys, index);
+    populate_keys(in_node->right, keys, index);
+}
+
+// Function to get all keys in the dictionary
+char** dict_get_all_keys(dict* in_dict) {
+    if (in_dict == NULL || in_dict->head == NULL)
+        return NULL;
+
+    int count = 0;
+    count_keys(in_dict->head, &count);
+
+    char** keys = malloc(count * sizeof(char*));
+
+    int index = 0;
+    populate_keys(in_dict->head, keys, &index);
+
+    return keys;
+}
+

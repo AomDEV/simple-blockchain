@@ -32,4 +32,8 @@ int dict_discard(dict* in_dict); //Delete entire dictionary
 void dict_print(dict* in_dict, int verbosity); //Print out dictionary
 int dict_foreach(dict* in_dict, int (*func)(bt_node* current_node, void* data), void* data); //Run given function on all dict element
 
+int count_keys(bt_node* in_node, int* count);
+void populate_keys(bt_node* in_node, char** keys, int* index);
+char** dict_get_all_keys(dict* in_dict);
+
 #pragma once
