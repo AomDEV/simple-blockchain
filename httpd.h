@@ -4,10 +4,6 @@
 #include <string.h>
 #include <stdio.h>
 
-//Server control functions
-
-void* serve_forever(void *HTTP_PORT);
-
 // Client request
 
 char    *method,    // "GET" or "POST"
@@ -18,11 +14,15 @@ char    *method,    // "GET" or "POST"
 char    *payload;     // for POST
 int      payload_size;
 
+#ifndef COMMANDS_H_
+#define COMMANDS_H_
+// Request header
 char *request_header(const char* name);
-
-// user shall implement this function
-
+//Server control functions
+void* serve_forever(void *HTTP_PORT);
+// User implemented function
 void route();
+#endif
 
 // some interesting macro for `route()`
 #define ROUTE_START()       if (0) {
