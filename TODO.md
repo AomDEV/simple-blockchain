@@ -3,6 +3,9 @@
 - [ ] Implement `challenge`, `mine` function
 - [ ] Implement client connection
 
+# BUGS
+- [ ] Fix node double connection
+
 # TODO
 - [ ] New Block Validation (51% Node Validate)
 - [ ] Scale-down node memory usage
