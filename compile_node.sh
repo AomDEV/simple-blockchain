@@ -5,4 +5,4 @@ gcc -c -o blockchain.o blockchain.c
 gcc -I /opt/homebrew/include -L/opt/homebrew/lib/ \
 node.c blockchain.o util.o httpd.o \
 -o node \
--lcrypto -lssl -lpthread
+-lcrypto -lssl -lpthread -Wall
