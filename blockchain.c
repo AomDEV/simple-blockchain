@@ -17,16 +17,18 @@ block* create_genesis_block() {
     new_block->trans_list_length = 0;
     return new_block;
 }
-int challenge(block* prev, char sender[PUBLIC_ADDRESS_SIZE], int nonce) {
+int challenge(block prev, char sender[PUBLIC_ADDRESS_SIZE], int nonce) {
     return 0;
 }
-block* mine(block* prev, int nonce, char sender[PUBLIC_ADDRESS_SIZE]) {
-    return NULL;
+block* mine(block prev, int nonce, char sender[PUBLIC_ADDRESS_SIZE]) {
+    block* new_block = malloc(sizeof(block));
+    
+    return new_block;
 }
 char* hash_transaction(transaction txn[TRANS_LIST_SIZE]) {
     return NULL;
 }
-char* hash_block(block* block) {
+char* hash_block(block block) {
     return NULL;
 }
 void serializeNode(node* data, unsigned char* buffer) {

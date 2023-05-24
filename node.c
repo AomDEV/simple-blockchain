@@ -12,6 +12,7 @@
 #include "node.h"
 #include "httpd.h"
 #include "util.h"
+#include "dict.h"
 
 block* chain;
 int nodes[FD_SETSIZE];
@@ -20,6 +21,10 @@ struct sockaddr_in server_address;
 int client_df = 0;
 struct sockaddr_in client_address;
 char address[PUBLIC_ADDRESS_SIZE];
+int max_thread = 5;
+dict* balances;
+struct miner nonce;
+pthread_mutex_t lock;
 
 // HTTP Routes
 void route() {
@@ -120,14 +125,52 @@ int start(int port, int http_port, int node_port) {
 
 // Mining
 void mining() {
-    char test;
-    scanf("%c", &test);
-    char test2;
-    scanf("%c", &test2);
+    sleep(3);
+    printf("\nStart Mining (%d thread)\n", max_thread);
 
     while(1) {
+        printf("\n=== Mining for Block #%d ===\n", chain->index);
+        int t;
 
+        pthread_t threads[max_thread];
+        bound boundaries[max_thread];
+        
+        nonce.index = chain->index;
+        nonce.current = *chain;
+
+        pthread_mutex_init(&lock, NULL);
+        for(t = 0; t < max_thread; t++) {
+            const unsigned int per_thread = (MAX_NONCE / max_thread) - 1;
+            const unsigned int min = per_thread * t;
+            const unsigned int max = min + per_thread;    
+            
+            boundaries[t].index = t;
+            boundaries[t].bottom = min;
+            boundaries[t].top = max;
+
+            pthread_create(&threads[t], NULL, bruteforce, &boundaries[t]);
+        }
+
+        for (t = 0; t < max_thread; t++) {
+            pthread_join(threads[t], NULL);
+        }
     }
+}
+
+void* bruteforce(void* boundary) {
+    bound* data = (bound*)boundary;
+    printf("\nThread #%d is now executing\n", data->index);
+    for (int i = data->bottom; i < data->top; i++) {
+        int result = challenge(nonce.current, address, i);
+        if(result > 0) {
+            nonce.nonce = i;
+            printf("\nThread #%d found nonce (%d)\n", data->index, i);
+            break;
+        }
+    }
+    printf("\nThread #%d terminated\n", data->index);
+    pthread_exit(NULL);
+    return 0;
 }
 
 // Calling receiving every 2 seconds
@@ -241,6 +284,11 @@ int main(int argc, const char* argv[]) {
     const char* owner = get_raw_args(argv, owner_args, 1);
     if(owner != NULL) strcpy(address, owner);
 
+    char* thread_args[2] = {"-t", "-thread"};
+    int thread = get_int_args(argv, thread_args, 2);
+    max_thread = thread;
+    if(max_thread <= 0) max_thread = 1;
+
     if(chain == NULL && node <= 0) {
         chain = create_genesis_block();
         printf("\nGenesis block #%d created\n", chain->index);
@@ -346,11 +394,12 @@ void on_mined_block(node data) {
     if(chain->prev == NULL) {
         chain->prev = &data.prev;
     }
-    if(challenge(chain, data.sender, data.current.nonce) >= 1) {
-        chain = mine(chain, data.current.nonce, data.sender);
+    if(challenge(*chain, data.sender, data.current.nonce) >= 1) {
+        chain = mine(*chain, data.current.nonce, data.sender);
     };
 }
 
 void on_new_transaction(node data) {
     // do something
+    // do account balance update
 }
