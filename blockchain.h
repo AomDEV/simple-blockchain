@@ -44,8 +44,8 @@ typedef struct node {
 } node;
 
 block* create_genesis_block();
-char* hash_block(char* output , block* in_block);
-char hash_transaction(char* output , transaction* trans_list, unsigned int trans_list_length);
+char* hash_block(block* block, char sender[PUBLIC_ADDRESS_SIZE], int nonce);
+char* hash_transaction(transaction* trans_list, unsigned int trans_list_length);
 int challenge(block* prev, char sender[PUBLIC_ADDRESS_SIZE], int nonce);
 block* create_new_block(block* prev, int nonce);
 transaction* add_transaction(char sender[PUBLIC_ADDRESS_SIZE], char recipient[PUBLIC_ADDRESS_SIZE], int amount, char signature);
@@ -56,3 +56,5 @@ transaction* get_transactions();
 void serializeNode(node* data, unsigned char* buffer);
 void deserializeNode(node* data, unsigned char* buffer);
 void hash256(unsigned char* output, const char* input);
+
+
