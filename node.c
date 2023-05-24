@@ -25,6 +25,7 @@ int max_thread = 5;
 dict* balances;
 struct miner nonce;
 int socket_ready = 0;
+int found_nonce = 0;
 // index:0 - HTTP
 // index:1 - Server
 // index:2 - Client
@@ -169,6 +170,7 @@ void* mining() {
         }
 
         printf("\n=== Mining for Block #%d ===\n", chain->index);
+        found_nonce = 0;
         pthread_t threads[max_thread];
         bound boundaries[max_thread];
         
@@ -186,9 +188,9 @@ void* mining() {
 
             pthread_create(&threads[t], NULL, bruteforce, &boundaries[t]);
         }
+        void* found;
         for (int t = 0; t < max_thread; t++) {
-            if(threads[t] == NULL) continue;
-            if(pthread_join(threads[t], NULL) != 0) {
+            if(pthread_join(threads[t], &found) != 0) {
                 fprintf(stderr, "\nFailed to join socket thread %d\n", t);
                 pthread_exit(NULL);
                 break;
@@ -202,18 +204,21 @@ void* mining() {
 
 void* bruteforce(void* boundary) {
     bound* data = (bound*)boundary;
-    printf("\nThread #%d is now executing\n", data->index);
+    printf("\nThread #%d is now executing (%d-%d)\n", data->index, data->bottom, data->top);
     for (int i = data->bottom; i < data->top; i++) {
-        int result = challenge(nonce.current, address, i);
+        if(found_nonce > 0) break;
+        int result = challenge(&nonce.current, address, i);
         if(result > 0) {
             nonce.nonce = i;
             printf("\nThread #%d found nonce (%d)\n", data->index, i);
             
-            block* mined = mine(*chain, i, address);
+            // convert pointer to non-pointer
+            block* mined = mine(chain, i, address);
             node buffer;
             buffer.function = mined_block;
             strcpy(buffer.sender, address);
             buffer.current = *mined;
+            buffer.current.nonce = i;
             buffer.current.prev = NULL;
             buffer.prev = *chain;
             buffer.prev.prev = NULL;
@@ -222,11 +227,17 @@ void* bruteforce(void* boundary) {
             printf("\n=== Block #%d mined ===\n", chain->index);
 
             broadcast(buffer);
+            
+            pthread_mutex_lock(&lock);
+            found_nonce = 1;
+            pthread_mutex_unlock(&lock);
+
+            pthread_exit((void*)1);
             break;
         }
     }
     printf("\nThread #%d terminated\n", data->index);
-    pthread_exit(NULL);
+    pthread_exit((void*)0);
 }
 
 // Calling receiving every 2 seconds
@@ -350,14 +361,19 @@ int main(int argc, const char* argv[]) {
 
     char* owner_args[1] = {"-address"};
     const char* owner = get_raw_args(argv, owner_args, 1);
-    if(owner != NULL) strcpy(address, owner);
+    if(owner != NULL) strncpy(address, owner, PUBLIC_ADDRESS_SIZE);
 
     char* thread_args[2] = {"-t", "-thread"};
     int thread = get_int_args(argv, thread_args, 2);
     max_thread = thread;
 
+    balances = dict_create();
     if(chain == NULL && node <= 0) {
+        pthread_mutex_lock(&lock);
         chain = create_genesis_block();
+        pthread_cond_signal(&cond);
+        pthread_mutex_unlock(&lock);
+
         printf("\nGenesis block #%d created\n", chain->index);
     }
 
@@ -394,14 +410,20 @@ void on_client_received(int client_fd, node buffer) {
             strcpy(response.message, "Current Block");
             break;
         case current_block:
+            response.function = current_balance;
+            strcpy(response.message, "Current Balance");
             on_current_block(buffer.current, buffer.prev);
-            return;
+            break;
         case mined_block:
+            if(chain == NULL) return;
             if(buffer.current.index == chain->index) {
                 printf("\n[INFO] Mined Block #%d by %s\n", buffer.current.index, buffer.sender);
                 on_mined_block(buffer.prev, buffer.current, buffer.sender);
                 return;
             }
+            return;
+        case current_balance:
+            dict_insert(balances, buffer.balance.key, &buffer.balance.value, buffer.balance.size);
             return;
         case new_transaction:
             if(buffer.sender != buffer.txn.sender) {
@@ -441,6 +463,27 @@ void on_server_received(int server_fd, node buffer) {
             }
             strcpy(response.message, "Current Block");
             break;
+        case current_balance:
+            response.function = current_balance;
+            char** keys = dict_get_all_keys(balances);
+            if (keys != NULL) {
+                for (int i = 0; keys[i] != NULL; i++) {
+                    node_dict nodedict;
+                    printf("\ni: %d\n",i);
+                    printf("\nKey: %s\n", keys[i]);
+                    strncpy(nodedict.key, keys[i], PUBLIC_ADDRESS_SIZE);
+                    int value = *(int*)dict_access(balances, keys[i]);
+                    nodedict.value = value;
+                    nodedict.size = sizeof(nodedict.value);
+                    response.balance = nodedict;
+                    send_to_client(server_fd, response);
+                }
+                for (int i = 0; keys[i] != NULL; i++) {
+                    free(keys[i]);
+                }
+                free(keys);
+            }
+            return;
         case mined_block:
             is_broadcast = 1;
             on_mined_block(buffer.prev, buffer.current, buffer.sender);
@@ -473,8 +516,13 @@ void on_server_received(int server_fd, node buffer) {
 
 void on_current_block(block current, block prev) {
     pthread_mutex_lock(&lock);
-    chain = &current;
-    chain->prev = &prev;
+    if(current.timestamp <= 0) {
+        chain = create_genesis_block();
+        balances = dict_create();
+    } else {
+        chain = &current;
+        chain->prev = &prev;
+    }
     pthread_cond_signal(&cond);
     pthread_mutex_unlock(&lock);
 
@@ -485,10 +533,15 @@ void on_mined_block(block prev, block current, char sender[PUBLIC_ADDRESS_SIZE])
     if(chain->prev == NULL) {
         chain->prev = &prev;
     }
-    if(challenge(*chain, sender, current.nonce) >= 1) {
-        chain = mine(*chain, current.nonce, sender);
+    if(challenge(chain, sender, current.nonce) >= 1) {
+        pthread_mutex_lock(&lock);
+        chain = mine(chain, current.nonce, sender);
+        pthread_cond_signal(&cond);
+        pthread_mutex_unlock(&lock);
+
         on_new_transaction(*chain, chain->trans_list, chain->trans_list_length);
     };
+    printf("\nBalance of %s: %d\n", sender, *((int*)dict_access(balances, sender)));
 }
 
 void on_new_transaction(block current, transaction txns[TRANS_LIST_SIZE], unsigned int trans_list_length) {
@@ -511,15 +564,16 @@ void on_new_transaction(block current, transaction txns[TRANS_LIST_SIZE], unsign
         int sender_balance = 0;
         if(sender_funds != NULL) sender_balance = *((int*)sender_funds);
 
+
         void* recipient_funds = dict_access(balances, txns[i].recipient);
         int recipient_balance = 0;
         if(recipient_funds != NULL) recipient_balance = *((int*)recipient_funds);
 
-        int is_mint = txns[i].sender == get_empty_address() ? 1 : 0;
+        int is_mint = strcmp(txns[i].sender, get_empty_address()) == 0 ? 1 : 0;
 
         // if sender amount is less than transaction amount and not zero address (mint)
         if(sender_balance < txns[i].amount && is_mint <= 0) {
-            printf("\n[INFO] Insufficient funds (%s)\n", txns[i].hash);
+            printf("\n[INFO] %s Insufficient funds (%s)\n", txns[i].sender, txns[i].hash);
             return;
         }
         // if not mint
@@ -533,6 +587,6 @@ void on_new_transaction(block current, transaction txns[TRANS_LIST_SIZE], unsign
 
         // hash transaction
         transaction* tx = &txns[i];
-        strcpy(chain->trans_list[current_index].hash, hash_transaction(tx));
+        strncpy(chain->trans_list[current_index].hash, hash_transaction(tx), HASH_HEX_SIZE);
     }
 }
