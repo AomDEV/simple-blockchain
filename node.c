@@ -7,6 +7,7 @@
 #include <string.h>
 #include <arpa/inet.h>
 #include <pthread.h>
+#include <signal.h>
 
 #include "node.h"
 #include "httpd.h"
@@ -123,6 +124,10 @@ void mining() {
     scanf("%c", &test);
     char test2;
     scanf("%c", &test2);
+
+    while(1) {
+
+    }
 }
 
 // Calling receiving every 2 seconds
@@ -274,11 +279,11 @@ void on_client_received(int client_fd, node buffer) {
             strcpy(response.message, "Current Block");
             break;
         case current_block:
-            printf("\n[INFO] Current Block: #%d\n", buffer.block.index);
+            printf("\n[INFO] Current Block: #%d\n", buffer.current.index);
             return;
         case mined_block:
-            if(buffer.block.index == chain->index && chain->prev != NULL) {
-                printf("\n[INFO] Mined Block #%d by %s\n", buffer.block.index, buffer.sender);
+            if(buffer.current.index == chain->index) {
+                printf("\n[INFO] Mined Block #%d by %s\n", buffer.current.index, buffer.sender);
                 on_mined_block(buffer);
                 return;
             }
@@ -302,8 +307,12 @@ void on_server_received(int server_fd, node buffer) {
             return;
         case current_block:
             response.function = current_block;
-            response.block = *chain;
-            response.block.prev = NULL;
+            response.current = *chain;
+            response.current.prev = NULL;
+            if(chain->prev != NULL) {
+                response.prev = *(chain->prev);
+                response.prev.prev = NULL;
+            }
             strcpy(response.message, "Current Block");
             break;
         case mined_block:
@@ -311,7 +320,7 @@ void on_server_received(int server_fd, node buffer) {
             on_mined_block(buffer);
             response.function = mined_block;
             strcpy(response.sender, buffer.sender);
-            response.block = *(chain->prev);
+            response.current = *(chain->prev);
             strcpy(response.message, "Mined Block");
             break;
         case new_transaction:
@@ -334,8 +343,11 @@ void on_server_received(int server_fd, node buffer) {
 }
 
 void on_mined_block(node data) {
-    if(challenge(chain, data.sender, data.block.nonce) >= 1) {
-        chain = mine(chain, data.block.nonce, data.sender);
+    if(chain->prev == NULL) {
+        chain->prev = &data.prev;
+    }
+    if(challenge(chain, data.sender, data.current.nonce) >= 1) {
+        chain = mine(chain, data.current.nonce, data.sender);
     };
 }
 

@@ -36,7 +36,8 @@ typedef struct node {
     enum node_function function;
     char message[MESSAGE_SIZE];
     transaction txn;
-    block block;
+    block current;
+    block prev;
 } node;
 
 block* create_genesis_block();
