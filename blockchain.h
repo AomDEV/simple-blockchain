@@ -36,7 +36,7 @@ typedef struct node {
     enum node_function function;
     char message[MESSAGE_SIZE];
     transaction txn;
-    struct block* block;
+    block block;
 } node;
 
 block* create_genesis_block();
@@ -48,3 +48,5 @@ block* mine(block* prev, int nonce, char sender[PUBLIC_ADDRESS_SIZE]);
 int balance(char address[PUBLIC_ADDRESS_SIZE]);
 int get_current_block();
 transaction* get_transactions();
+void serializeNode(node* data, unsigned char* buffer);
+void deserializeNode(node* data, unsigned char* buffer);
