@@ -23,6 +23,9 @@ int challenge(block* prev, char sender[PUBLIC_ADDRESS_SIZE], int nonce) {
 block* mine(block* prev, int nonce, char sender[PUBLIC_ADDRESS_SIZE]) {
     return NULL;
 }
+char* hash_transaction(transaction txn[TRANS_LIST_SIZE]) {
+    return NULL;
+}
 char* hash_block(block* block) {
     return NULL;
 }
