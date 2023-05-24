@@ -2,3 +2,5 @@ client
 node
 .vscode
 *.o
+*.out
+node.dSYM/*

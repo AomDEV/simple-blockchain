@@ -12,14 +12,26 @@
 #include "node.h"
 #include "httpd.h"
 #include "util.h"
+#include "dict.h"
 
-block* chain;
+block* chain = NULL;
 int nodes[FD_SETSIZE];
 int server_fd = 0;
 struct sockaddr_in server_address;
 int client_df = 0;
 struct sockaddr_in client_address;
 char address[PUBLIC_ADDRESS_SIZE];
+int max_thread = 5;
+dict* balances;
+struct miner nonce;
+int socket_ready = 0;
+int found_nonce = 0;
+// index:0 - HTTP
+// index:1 - Server
+// index:2 - Client
+pthread_t processors[4];
+pthread_mutex_t lock;
+pthread_cond_t cond;
 
 // HTTP Routes
 void route() {
@@ -34,6 +46,10 @@ void route() {
 
 // Start Node
 int start(int port, int http_port, int node_port) {
+    // Initialize synchronization variables
+    pthread_mutex_init(&lock, NULL);
+    pthread_cond_init(&cond, NULL);
+
     printf("\nNode started.\n");
     sleep(3);
 
@@ -69,8 +85,8 @@ int start(int port, int http_port, int node_port) {
         http_port = 8080;
     }
 
-    pthread_t wid;
-    pthread_create(&wid, NULL, &serve_forever, &http_port);
+    // Serve HTTP
+    pthread_create(&processors[0], NULL, &serve_forever, &http_port);
 
     // Master Node Address Configuration
     if(node_port > 0) {
@@ -103,15 +119,34 @@ int start(int port, int http_port, int node_port) {
     }
 
     // Creating thread to keep receiving message in real time
-    pthread_t tid;
-    pthread_create(&tid, NULL, &receive_thread, &server_fd);
-
-    pthread_t node;
-    if(node_port > 0) {
-        pthread_create(&node, NULL, &receive_thread, &client_df);
+    if(pthread_create(&processors[1], NULL, &receive_thread, &server_fd) != 0) {
+        fprintf(stderr, "\nFailed to create server thread\n");
+        return (EXIT_FAILURE);
     }
 
-    mining();
+    if(node_port > 0) {
+        if(pthread_create(&processors[2], NULL, &receive_thread, &client_df)) {
+            fprintf(stderr, "\nFailed to create client thread\n");
+            return (EXIT_FAILURE);
+        }
+    }
+
+    if(pthread_create(&processors[3], NULL, &mining, NULL) != 0) {
+        fprintf(stderr, "\nFailed to create mining thread\n");
+        return (EXIT_FAILURE);
+    };
+
+    // Wait for all threads to finish (except the abandoned socket threads)
+    for (int i = 0; i < sizeof(processors); i++) {
+        if (pthread_join(processors[i], NULL) != 0) {
+            fprintf(stderr, "\nFailed to join socket thread #%d\n", i);
+            return 1;
+        }
+    }
+
+    // Cleanup synchronization variables
+    pthread_mutex_destroy(&lock);
+    pthread_cond_destroy(&cond);
 
     if(node_port > 0) close(client_df);
     close(server_fd);
@@ -119,26 +154,113 @@ int start(int port, int http_port, int node_port) {
 }
 
 // Mining
-void mining() {
-    char test;
-    scanf("%c", &test);
-    char test2;
-    scanf("%c", &test2);
+void* mining() {
+    // Wait for the socket threads to be ready
+    pthread_mutex_lock(&lock);
+    while (socket_ready < 1 || chain == NULL) pthread_cond_wait(&cond, &lock);
+    pthread_mutex_unlock(&lock);
 
-    while(1) {
+    // Perform the loop operations
+    printf("\nStart Mining (%d thread)\n", max_thread);
+    sleep(1);
+    while (1) {
+        if(max_thread <= 0) {
+            sleep(1);
+            continue;
+        }
 
+        printf("\n=== Mining for Block #%d ===\n", chain->index);
+        found_nonce = 0;
+        pthread_t threads[max_thread];
+        bound boundaries[max_thread];
+        
+        nonce.index = chain->index;
+        nonce.current = *chain;
+
+        for(int t = 0; t < max_thread; t++) {
+            const unsigned int per_thread = (MAX_NONCE / max_thread) - 1;
+            const unsigned int min = per_thread * t;
+            const unsigned int max = min + per_thread;    
+            
+            boundaries[t].index = t;
+            boundaries[t].bottom = min;
+            boundaries[t].top = max;
+
+            pthread_create(&threads[t], NULL, bruteforce, &boundaries[t]);
+        }
+        void* found;
+        for (int t = 0; t < max_thread; t++) {
+            if(pthread_join(threads[t], &found) != 0) {
+                fprintf(stderr, "\nFailed to join socket thread %d\n", t);
+                pthread_exit(NULL);
+                break;
+            }
+        }
+        sleep(1);
     }
+    printf("Mining thread finished\n");
+    pthread_exit(NULL);
+}
+
+void* bruteforce(void* boundary) {
+    bound* data = (bound*)boundary;
+    printf("\nThread #%d is now executing (%d-%d)\n", data->index, data->bottom, data->top);
+    for (int i = data->bottom; i < data->top; i++) {
+        if(found_nonce > 0) break;
+        int result = challenge(&nonce.current, address, i);
+        if(result > 0) {
+            nonce.nonce = i;
+            printf("\nThread #%d found nonce (%d)\n", data->index, i);
+            
+            // convert pointer to non-pointer
+            block* mined = mine(chain, i, address);
+            node buffer;
+            buffer.function = mined_block;
+            strcpy(buffer.sender, address);
+            buffer.current = *mined;
+            buffer.current.nonce = i;
+            buffer.current.prev = NULL;
+            buffer.prev = *chain;
+            buffer.prev.prev = NULL;
+
+            on_mined_block(buffer.prev, buffer.current, buffer.sender);
+            printf("\n=== Block #%d mined ===\n", chain->index);
+
+            broadcast(buffer);
+            
+            pthread_mutex_lock(&lock);
+            found_nonce = 1;
+            pthread_mutex_unlock(&lock);
+
+            pthread_exit((void*)1);
+            break;
+        }
+    }
+    printf("\nThread #%d terminated\n", data->index);
+    pthread_exit((void*)0);
 }
 
 // Calling receiving every 2 seconds
 void *receive_thread(void *local_fd)
 {
+    // Signal that the socket thread is ready
+    pthread_mutex_lock(&lock);
+    socket_ready++;
+    pthread_cond_signal(&cond);
+    pthread_mutex_unlock(&lock);
+
     int s_fd = *((int *)local_fd);
+    printf("\n[NODE#%d] Ready\n", s_fd);
+
+    pthread_detach(pthread_self());
+
     while (1)
     {
         sleep(2);
         receiving(s_fd);
     }
+    printf("Node thread finished\n");
+    pthread_exit(NULL);
 }
 
 // Receiving messages on our port
@@ -239,10 +361,19 @@ int main(int argc, const char* argv[]) {
 
     char* owner_args[1] = {"-address"};
     const char* owner = get_raw_args(argv, owner_args, 1);
-    if(owner != NULL) strcpy(address, owner);
+    if(owner != NULL) strncpy(address, owner, PUBLIC_ADDRESS_SIZE);
 
+    char* thread_args[2] = {"-t", "-thread"};
+    int thread = get_int_args(argv, thread_args, 2);
+    max_thread = thread;
+
+    balances = dict_create();
     if(chain == NULL && node <= 0) {
+        pthread_mutex_lock(&lock);
         chain = create_genesis_block();
+        pthread_cond_signal(&cond);
+        pthread_mutex_unlock(&lock);
+
         printf("\nGenesis block #%d created\n", chain->index);
     }
 
@@ -279,14 +410,31 @@ void on_client_received(int client_fd, node buffer) {
             strcpy(response.message, "Current Block");
             break;
         case current_block:
-            printf("\n[INFO] Current Block: #%d\n", buffer.current.index);
-            return;
+            response.function = current_balance;
+            strcpy(response.message, "Current Balance");
+            on_current_block(buffer.current, buffer.prev);
+            break;
         case mined_block:
+            if(chain == NULL) return;
             if(buffer.current.index == chain->index) {
                 printf("\n[INFO] Mined Block #%d by %s\n", buffer.current.index, buffer.sender);
-                on_mined_block(buffer);
+                on_mined_block(buffer.prev, buffer.current, buffer.sender);
                 return;
             }
+            return;
+        case current_balance:
+            dict_insert(balances, buffer.balance.key, &buffer.balance.value, buffer.balance.size);
+            return;
+        case new_transaction:
+            if(buffer.sender != buffer.txn.sender) {
+                printf("\n[INFO] Invalid transaction (%s)\n", buffer.txn.hash);
+                return;
+            }
+            printf("\n[INFO] Transaction Hash %s (%s to %s)\n", buffer.txn.hash, buffer.txn.sender, buffer.txn.recipient);
+
+            transaction txns[TRANS_LIST_SIZE];
+            txns[0] = buffer.txn;
+            on_new_transaction(*chain, txns, 1);
             return;
         default:
             return;
@@ -315,9 +463,30 @@ void on_server_received(int server_fd, node buffer) {
             }
             strcpy(response.message, "Current Block");
             break;
+        case current_balance:
+            response.function = current_balance;
+            char** keys = dict_get_all_keys(balances);
+            if (keys != NULL) {
+                for (int i = 0; keys[i] != NULL; i++) {
+                    node_dict nodedict;
+                    printf("\ni: %d\n",i);
+                    printf("\nKey: %s\n", keys[i]);
+                    strncpy(nodedict.key, keys[i], PUBLIC_ADDRESS_SIZE);
+                    int value = *(int*)dict_access(balances, keys[i]);
+                    nodedict.value = value;
+                    nodedict.size = sizeof(nodedict.value);
+                    response.balance = nodedict;
+                    send_to_client(server_fd, response);
+                }
+                for (int i = 0; keys[i] != NULL; i++) {
+                    free(keys[i]);
+                }
+                free(keys);
+            }
+            return;
         case mined_block:
             is_broadcast = 1;
-            on_mined_block(buffer);
+            on_mined_block(buffer.prev, buffer.current, buffer.sender);
             response.function = mined_block;
             strcpy(response.sender, buffer.sender);
             response.current = *(chain->prev);
@@ -325,12 +494,15 @@ void on_server_received(int server_fd, node buffer) {
             break;
         case new_transaction:
             is_broadcast = 1;
-            if(chain->trans_list_length == 0 || chain->trans_list[chain->trans_list_length - 1].hash != buffer.txn.hash) {
-               chain->trans_list[chain->trans_list_length] = buffer.txn; 
-               chain->trans_list_length++;
-            }
+
+            transaction txns[TRANS_LIST_SIZE];
+            txns[0] = buffer.txn;
+            on_new_transaction(*chain, txns, 1);
+
             response.function = new_transaction;
             response.txn = buffer.txn;
+            response.current = buffer.current;
+            strcpy(response.sender, buffer.txn.sender);
             strcpy(response.message, "New Transaction");
             break;
     }
@@ -342,15 +514,78 @@ void on_server_received(int server_fd, node buffer) {
     printf("\n[INFO] Sent %lu bytes\n", sizeof(response));
 }
 
-void on_mined_block(node data) {
-    if(chain->prev == NULL) {
-        chain->prev = &data.prev;
+void on_current_block(block current, block prev) {
+    pthread_mutex_lock(&lock);
+    if(current.timestamp <= 0) {
+        chain = create_genesis_block();
+        balances = dict_create();
+    } else {
+        chain = &current;
+        chain->prev = &prev;
     }
-    if(challenge(chain, data.sender, data.current.nonce) >= 1) {
-        chain = mine(chain, data.current.nonce, data.sender);
-    };
+    pthread_cond_signal(&cond);
+    pthread_mutex_unlock(&lock);
+
+    printf("\n[INFO] Current Block: #%d\n", chain->index);
 }
 
-void on_new_transaction(node data) {
+void on_mined_block(block prev, block current, char sender[PUBLIC_ADDRESS_SIZE]) {
+    if(chain->prev == NULL) {
+        chain->prev = &prev;
+    }
+    if(challenge(chain, sender, current.nonce) >= 1) {
+        pthread_mutex_lock(&lock);
+        chain = mine(chain, current.nonce, sender);
+        pthread_cond_signal(&cond);
+        pthread_mutex_unlock(&lock);
+
+        on_new_transaction(*chain, chain->trans_list, chain->trans_list_length);
+    };
+    printf("\nBalance of %s: %d\n", sender, *((int*)dict_access(balances, sender)));
+}
+
+void on_new_transaction(block current, transaction txns[TRANS_LIST_SIZE], unsigned int trans_list_length) {
+    if(chain->index != current.index) {
+        printf("\n[INFO] Invalid transaction (%s)\n", txns[0].hash);
+        return;
+    };
     // do something
+    for (int i = 0; i < trans_list_length; i++) {
+        if(chain->trans_list_length >= TRANS_LIST_SIZE) {
+            printf("\n[INFO] Transaction is full\n");
+            return;
+        };
+        int current_index = chain->trans_list_length;
+        chain->trans_list[current_index] = txns[i];
+        chain->trans_list_length++;
+
+        // do account balance update
+        void* sender_funds = dict_access(balances, txns[i].sender);
+        int sender_balance = 0;
+        if(sender_funds != NULL) sender_balance = *((int*)sender_funds);
+
+
+        void* recipient_funds = dict_access(balances, txns[i].recipient);
+        int recipient_balance = 0;
+        if(recipient_funds != NULL) recipient_balance = *((int*)recipient_funds);
+
+        int is_mint = strcmp(txns[i].sender, get_empty_address()) == 0 ? 1 : 0;
+
+        // if sender amount is less than transaction amount and not zero address (mint)
+        if(sender_balance < txns[i].amount && is_mint <= 0) {
+            printf("\n[INFO] %s Insufficient funds (%s)\n", txns[i].sender, txns[i].hash);
+            return;
+        }
+        // if not mint
+        if(is_mint <= 0) {
+            sender_balance -= txns[i].amount;
+        };
+        recipient_balance += txns[i].amount;
+
+        dict_insert(balances, txns[i].sender, &sender_balance, sizeof(sender_funds));
+        dict_insert(balances, txns[i].recipient, &recipient_balance, sizeof(recipient_funds));
+
+        char* hashed = hash_transaction(txns[i]);
+        strncpy(chain->trans_list[current_index].hash, hashed, HASH_HEX_SIZE);
+    }
 }

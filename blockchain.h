@@ -1,17 +1,20 @@
-#define PUBLIC_ADDRESS_SIZE 500
+#define PUBLIC_ADDRESS_SIZE 64
 #define TRANS_LIST_SIZE 20
 #define HASH_HEX_SIZE 65
 #define MESSAGE_SIZE 1024
 #define HASH_SIZE 32
 #define BLOCK_STR_SIZE 30000
 #define BLOCK_BUFFER_SIZE 5000
+#define MAX_NONCE INT32_MAX
+#define DIFFICULTY 2
+#define BLOCK_REWARD 100
 
 // Transaction structure
 typedef struct transaction {
-    int timestamp;
+    unsigned int timestamp;
     char sender[PUBLIC_ADDRESS_SIZE];
     char recipient[PUBLIC_ADDRESS_SIZE];
-    int amount;
+    unsigned int amount;
     char hash[HASH_HEX_SIZE];
 } transaction;
 
@@ -33,7 +36,13 @@ enum node_function {
     current_block,
     mined_block,
     new_transaction,
+    current_balance,
 };
+typedef struct node_dict {
+    char key[PUBLIC_ADDRESS_SIZE];
+    int value;
+    size_t size;
+} node_dict;
 typedef struct node {
     char sender[PUBLIC_ADDRESS_SIZE];
     enum node_function function;
@@ -41,20 +50,20 @@ typedef struct node {
     transaction txn;
     block current;
     block prev;
+    node_dict balance;
 } node;
 
 block* create_genesis_block();
 char* hash_block(block* block, char sender[PUBLIC_ADDRESS_SIZE], int nonce);
-char* hash_transaction(transaction* trans_list, unsigned int trans_list_length);
-int challenge(block* prev, char sender[PUBLIC_ADDRESS_SIZE], int nonce);
-block* create_new_block(block* prev, int nonce);
+char* hash_transaction(transaction txn);
+char* hash_transactions(transaction* trans_list, unsigned int trans_list_length);
+int challenge(block* current, char sender[PUBLIC_ADDRESS_SIZE], int nonce);
 transaction* add_transaction(char sender[PUBLIC_ADDRESS_SIZE], char recipient[PUBLIC_ADDRESS_SIZE], int amount, char signature);
-block* mine(block* prev, int nonce, char sender[PUBLIC_ADDRESS_SIZE]);
+block* mine(block* current, int nonce, char sender[PUBLIC_ADDRESS_SIZE]);
 int balance(char address[PUBLIC_ADDRESS_SIZE]);
 int get_current_block();
 transaction* get_transactions();
 void serializeNode(node* data, unsigned char* buffer);
 void deserializeNode(node* data, unsigned char* buffer);
-void hash256(unsigned char* output, const char* input);
-
-
+int get_difficulty(block prev);
+char* get_empty_address();
