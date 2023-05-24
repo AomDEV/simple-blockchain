@@ -74,7 +74,7 @@ void* serve_forever(void *HTTP_PORT)
     }
 }
 
-//start server
+// start server
 void startServer(const char *port)
 {
     struct addrinfo hints, *res, *p;
@@ -126,7 +126,7 @@ char *request_header(const char* name)
     return NULL;
 }
 
-//client connection
+// client connection
 void respond(int n)
 {
     int rcvd, fd, bytes_read;
@@ -189,8 +189,9 @@ void respond(int n)
         close(STDOUT_FILENO);
     }
 
-    //Closing SOCKET
-    shutdown(clientfd, SHUT_RDWR);         //All further send and recieve operations are DISABLED...
+    // Closing SOCKET
+    shutdown(clientfd, SHUT_RDWR);         // All further send and recieve operations are DISABLED...
     close(clientfd);
     clients[n]=-1;
+    free(buf);
 }
