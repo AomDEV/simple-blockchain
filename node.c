@@ -227,7 +227,7 @@ void* bruteforce(void* boundary) {
             printf("\n=== Block #%d mined ===\n", chain->index);
             printf  ("------ Block Info ------\n");
             printf  ("Block Hash: %s\n", mined->prev->current_hash);
-            printf  ("Nonce: %d\n", mined->nonce);
+            printf  ("Nonce: %d\n", mined->prev->nonce);
             printf  ("----- Transactions -----\n");
             for(int i = 0; i < mined->prev->trans_list_length; i++) {
                 transaction tx = mined->prev->trans_list[i];
@@ -584,10 +584,15 @@ void on_new_transaction(block current, transaction txns[TRANS_LIST_SIZE], unsign
         int recipient_balance = 0;
         if(recipient_funds != NULL) recipient_balance = *((int*)recipient_funds);
 
-        int is_mint = strcmp(txns[i].sender, get_empty_address()) == 0 ? 1 : 0;
+        char zero_addr[PUBLIC_ADDRESS_SIZE];
+        char* empty_char = get_empty_char(PUBLIC_ADDRESS_SIZE - 1);
+        strncpy(zero_addr, empty_char, PUBLIC_ADDRESS_SIZE - 1);
+        zero_addr[PUBLIC_ADDRESS_SIZE - 1] = '\0';
+        int is_mint = strcmp(txns[i].sender, zero_addr) == 0 ? 1 : 0;
 
         // if sender amount is less than transaction amount and not zero address (mint)
-        if(sender_balance < txns[i].amount && is_mint <= 0) {
+        // printf("\ns %d %d\n", sender_balance, txns[i].amount);
+        if(is_mint <= 0 && sender_balance < txns[i].amount) {
             printf("\n[INFO] Insufficient funds (%s)\n", txns[i].sender);
             return;
         }
