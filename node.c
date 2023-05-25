@@ -553,7 +553,10 @@ void on_mined_block(block prev, block current, char sender[PUBLIC_ADDRESS_SIZE])
 
         on_new_transaction(*chain, chain->trans_list, chain->trans_list_length);
     };
-    printf("\nBalance of %s: %d\n", sender, *((int*)dict_access(balances, sender)));
+    void* sender_funds = dict_access(balances, sender);
+    if(sender_funds != NULL) {
+        printf("\nBalance of %s: %d\n", sender, *((int*)sender_funds));
+    }
 }
 
 void on_new_transaction(block current, transaction txns[TRANS_LIST_SIZE], unsigned int trans_list_length) {
