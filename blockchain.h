@@ -66,4 +66,7 @@ transaction* get_transactions();
 void serializeNode(node* data, unsigned char* buffer);
 void deserializeNode(node* data, unsigned char* buffer);
 int get_difficulty(block prev);
+char* get_filled_char(size_t size);
 char* get_empty_address();
+char* get_empty_hash();
+char* get_empty_char(size_t size);

@@ -225,6 +225,20 @@ void* bruteforce(void* boundary) {
 
             on_mined_block(buffer.prev, buffer.current, buffer.sender);
             printf("\n=== Block #%d mined ===\n", chain->index);
+            printf  ("------ Block Info ------\n");
+            printf  ("Block Hash: %s\n", mined->prev->current_hash);
+            printf  ("Nonce: %d\n", mined->nonce);
+            printf  ("----- Transactions -----\n");
+            for(int i = 0; i < mined->prev->trans_list_length; i++) {
+                transaction tx = mined->prev->trans_list[i];
+                printf("Hash: %s\n", tx.hash);
+                printf("Sender: %s\n", tx.sender);
+                printf("Recipient: %s\n", tx.recipient);
+                printf("Amount: %d\n", tx.amount);
+                printf("Timestamp: %d\n", tx.timestamp);
+                printf("------------------------\n");
+            }
+            printf("\n=======================\n");
 
             broadcast(buffer);
             
@@ -469,8 +483,6 @@ void on_server_received(int server_fd, node buffer) {
             if (keys != NULL) {
                 for (int i = 0; keys[i] != NULL; i++) {
                     node_dict nodedict;
-                    printf("\ni: %d\n",i);
-                    printf("\nKey: %s\n", keys[i]);
                     strncpy(nodedict.key, keys[i], PUBLIC_ADDRESS_SIZE);
                     int value = *(int*)dict_access(balances, keys[i]);
                     nodedict.value = value;
@@ -546,7 +558,7 @@ void on_mined_block(block prev, block current, char sender[PUBLIC_ADDRESS_SIZE])
 
 void on_new_transaction(block current, transaction txns[TRANS_LIST_SIZE], unsigned int trans_list_length) {
     if(chain->index != current.index) {
-        printf("\n[INFO] Invalid transaction (%s)\n", txns[0].hash);
+        printf("\n[INFO] Invalid transaction\n");
         return;
     };
     // do something
@@ -573,7 +585,7 @@ void on_new_transaction(block current, transaction txns[TRANS_LIST_SIZE], unsign
 
         // if sender amount is less than transaction amount and not zero address (mint)
         if(sender_balance < txns[i].amount && is_mint <= 0) {
-            printf("\n[INFO] %s Insufficient funds (%s)\n", txns[i].sender, txns[i].hash);
+            printf("\n[INFO] Insufficient funds (%s)\n", txns[i].sender);
             return;
         }
         // if not mint

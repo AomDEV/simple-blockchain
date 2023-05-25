@@ -31,19 +31,25 @@ block* create_genesis_block() {
 }
 int challenge(block* current, char sender[PUBLIC_ADDRESS_SIZE], int nonce) {
     // if(nonce == 1503238541+100) return 1; // debug
+    if(current == NULL) return 0;
     char* block_hash = hash_block(current, sender, nonce);
     if(block_hash == NULL) return 0;
     char* head = malloc(DIFFICULTY);
-    memcpy(&head, block_hash , DIFFICULTY);
+    strncpy(head, block_hash , DIFFICULTY);
 
     // Build answer with DIFFICULTY 0's
     char* answer = malloc(DIFFICULTY);
-    for (int i = 0; i < DIFFICULTY; i++) answer[i] = '0';
+    strncpy(answer, get_filled_char(DIFFICULTY), DIFFICULTY);
 
-    if(head == answer) return 1;
+    // compare head and answer
+    if(strcmp(head, answer) == 0) return 1;
     return 0;
 }
 block* mine(block* current, int nonce, char sender[PUBLIC_ADDRESS_SIZE]) {
+    if(current == NULL) {
+        printf("\nError: current block is NULL\n");
+        return NULL;
+    }
     block* new_block = malloc(sizeof(block));
     new_block->index = current->index + 1;
     new_block->timestamp = time(NULL);
@@ -52,14 +58,19 @@ block* mine(block* current, int nonce, char sender[PUBLIC_ADDRESS_SIZE]) {
     new_block->trans_list_length = 0;
     new_block->nonce = 0;
     new_block->prev = current;
-    strcpy(new_block->prev->current_hash, hash_block(current, sender, nonce));
+    strncpy(new_block->prev->current_hash, hash_block(current, sender, nonce), HASH_HEX_SIZE);
     new_block->prev->nonce = nonce;
 
     // add first transaction to block
-    transaction txn;
+    char zero_addr[PUBLIC_ADDRESS_SIZE];
+    char* empty_char = get_empty_char(PUBLIC_ADDRESS_SIZE - 1);
+    strncpy(zero_addr, empty_char, PUBLIC_ADDRESS_SIZE - 1);
+    zero_addr[PUBLIC_ADDRESS_SIZE - 1] = '\0';
+
+    struct transaction txn;
     txn.timestamp = time(NULL);
-    strncpy(txn.sender, get_empty_address(), PUBLIC_ADDRESS_SIZE);
-    strncpy(txn.recipient, sender, PUBLIC_ADDRESS_SIZE);
+    strcpy(txn.sender, zero_addr);
+    strcpy(txn.recipient, sender);
     txn.amount = 100;
 
     new_block->trans_list[0] = txn;
@@ -114,14 +125,15 @@ char* hash_transactions(transaction* trans_list, unsigned int trans_list_length)
 
 char* hash_block(block* block, char sender[PUBLIC_ADDRESS_SIZE], int nonce) {
     char* transactions_hash = hash_transactions(block->trans_list, block->trans_list_length);
+    char* block_hash = block->prev == NULL ? get_empty_hash() : block->prev->current_hash;
     char current_block[BLOCK_BUFFER_SIZE];
-    sprintf(current_block, "%u %u %s %u %u %s",
+    sprintf(current_block, "%u %u %s %u %d %s",
         block->index,
         block->timestamp,
         transactions_hash,
         block->trans_list_length,
         nonce,
-        block->prev->current_hash
+        block_hash
     );
     unsigned char hashed[HASH_SIZE];
     hash256(hashed, current_block);
@@ -144,17 +156,23 @@ void deserializeNode(node* data, unsigned char* buffer) {
     memcpy(data, buffer, sizeof(node));
 }
 
-char* get_empty_address() {
-    char* addr = (char*)malloc(PUBLIC_ADDRESS_SIZE * sizeof(char));
-    for (int i = 0; i < PUBLIC_ADDRESS_SIZE - 1; i++) {
-        if (i == 1) {
-            addr[i] = 'x';
-        } else {
-            addr[i] = '0';
-        }
-    }
+char* get_filled_char(size_t size) {
+    size_t new_size = size + 1;
+    char* addr = (char*)malloc(new_size * sizeof(char));
+    for (int i = 0; i < new_size - 1; i++) addr[i] = '0';
 
     // Null-terminate the string
-    addr[PUBLIC_ADDRESS_SIZE - 1] = '\0';
+    addr[new_size - 1] = '\0';
     return addr;
+}
+char* get_empty_char(size_t size) {
+    char* filled = get_filled_char(size + 1);
+    filled[1] = 'x';
+    return filled;
+}
+char* get_empty_hash() {
+    return get_empty_char(HASH_HEX_SIZE);
+}
+char* get_empty_address() {
+    return get_empty_char(PUBLIC_ADDRESS_SIZE);
 }
