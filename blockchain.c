@@ -74,7 +74,7 @@ block* mine(block* current, int nonce, char sender[PUBLIC_ADDRESS_SIZE]) {
     txn.amount = 100;
 
     new_block->trans_list[0] = txn;
-    new_block->trans_list_length++;
+    new_block->trans_list_length = 1;
 
     return new_block;
 }
